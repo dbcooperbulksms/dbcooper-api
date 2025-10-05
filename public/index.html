@@ -1,0 +1,107 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>DBcooper Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { background:#0e0f12; color:#e9eef6; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; }
+    .wrap { max-width: 720px; margin: 40px auto; padding: 20px; background:#1c212d; border-radius:16px; }
+    h1 { margin: 0 0 10px; color:#00e676; }
+    label { display:block; margin-top:12px; font-size:14px; color:#b9c1cc; }
+    input, select, textarea { width:100%; padding:12px; border-radius:10px; border:1px solid #2e3442; background:#232732; color:#fff; }
+    .row { display:flex; gap:12px; }
+    .row > div { flex:1; }
+    button { margin-top:16px; width:100%; padding:14px; border:none; border-radius:12px; font-weight:600; background:#00e676; color:#000; cursor:pointer; }
+    .small { color:#b9c1cc; font-size:12px; }
+    .ok { color:#00e676; }
+    .err { color:#ff8a80; }
+    code { background:#0e0f12; padding:2px 6px; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>DBcooper Admin</h1>
+    <p class="small">Enter details and click Save. This panel is password-protected and does not expose your server key.</p>
+
+    <label>Device Code (8 chars, uppercase)</label>
+    <input id="device" placeholder="e.g. A7C12F4B" />
+
+    <div class="row">
+      <div>
+        <label>Plan</label>
+        <select id="plan">
+          <option>Monthly</option>
+          <option>Quarterly</option>
+          <option>Yearly</option>
+        </select>
+      </div>
+      <div>
+        <label>Status</label>
+        <select id="status">
+          <option>active</option>
+          <option>inactive</option>
+        </select>
+      </div>
+    </div>
+
+    <label>Expiry (UTC ISO, e.g. 2026-12-31T23:59:59Z)</label>
+    <input id="expiry" placeholder="2026-12-31T23:59:59Z" />
+
+    <label>Notes (optional)</label>
+    <textarea id="notes" rows="3" placeholder="Paid via bank transfer, etc."></textarea>
+
+    <button id="save">Save / Update</button>
+    <p id="result" class="small"></p>
+
+    <hr style="border-color:#2e3442; margin:24px 0" />
+
+    <p class="small">
+      Verify with public check: <br/>
+      <code id="checkLink"></code>
+    </p>
+  </div>
+
+  <script>
+    const result = document.getElementById('result');
+    const checkLink = document.getElementById('checkLink');
+
+    document.getElementById('save').onclick = async () => {
+      result.textContent = 'Saving...';
+      result.className = 'small';
+
+      const device = document.getElementById('device').value.trim().toUpperCase();
+      const plan   = document.getElementById('plan').value;
+      const status = document.getElementById('status').value;
+      const expiry = document.getElementById('expiry').value.trim();
+      const notes  = document.getElementById('notes').value.trim();
+
+      if (!/^[A-F0-9]{8}$/.test(device)) {
+        result.textContent = 'Enter a valid 8-character uppercase hex device code.';
+        result.className = 'small err';
+        return;
+      }
+
+      try {
+        const r = await fetch('/admin/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ device, status, plan, expiry, notes })
+        });
+        const json = await r.json();
+        if (!r.ok || !json.ok) {
+          result.textContent = 'Error: ' + (json.error || r.status);
+          result.className = 'small err';
+          return;
+        }
+        result.textContent = 'Saved ✓';
+        result.className = 'small ok';
+        checkLink.textContent = location.origin + '/check?device=' + device;
+      } catch (e) {
+        result.textContent = 'Network error: ' + e.message;
+        result.className = 'small err';
+      }
+    };
+  </script>
+</body>
+</html>
