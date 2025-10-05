@@ -12,15 +12,14 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 // ---------- ENV VARS ----------
-const ADMIN_KEY  = process.env.ADMIN_KEY  || "dbcooper-secret"; // API key for /update
-const BASIC_USER = process.env.BASIC_USER || "admin";           // login username
-const BASIC_PASS = process.env.BASIC_PASS || "changeme";        // login password
+const ADMIN_KEY  = process.env.ADMIN_KEY  || "dbcooper-secret"; // API key for /update (external)
+const BASIC_USER = process.env.BASIC_USER || "admin";           // admin login username
+const BASIC_PASS = process.env.BASIC_PASS || "changeme";        // admin login password
 
 // ---------- PERSISTENCE ----------
 const DB_FILE = path.join(__dirname, "data.json");
 function readDB() { try { return JSON.parse(fs.readFileSync(DB_FILE, "utf8")); } catch { return {}; } }
 function writeDB(db) { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); }
-
 if (!fs.existsSync(DB_FILE)) {
   writeDB({
     EXAMPLE01: { status: "active", plan: "Monthly", expiry: "2026-01-31T23:59:59Z", notes: "Test device" }
@@ -55,7 +54,7 @@ app.get("/check", (req, res) => {
   });
 });
 
-// ---------- ADMIN API (for scripts/Postman) ----------
+// ---------- ADMIN API (external scripts/Postman) ----------
 app.post("/update", (req, res) => {
   const auth = req.headers.authorization || "";
   const key = auth.startsWith("Bearer ") ? auth.slice(7) : auth;
@@ -73,51 +72,54 @@ app.post("/update", (req, res) => {
 
 // ================== ADMIN PANEL (SESSION LOGIN) ==================
 
-// in-memory session store: sid -> { createdAt, ua }
-const sessions = new Map();
+const sessions = new Map(); // sid -> { createdAt, lastSeen, ua }
 
-// Middleware: set strict no-cache headers on admin pages
-function noStore(req, res, next) {
+function noStore(_req, res, next) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
   next();
 }
 
-// Parse Cookie header
 function parseCookies(cookieHeader = "") {
   return Object.fromEntries(
-    cookieHeader.split(";").map(v => v.trim()).filter(Boolean).map(kv => {
-      const idx = kv.indexOf("=");
-      return idx === -1 ? [kv, ""] : [kv.slice(0, idx), decodeURIComponent(kv.slice(idx + 1))];
-    })
+    cookieHeader.split(";")
+      .map(v => v.trim())
+      .filter(Boolean)
+      .map(kv => {
+        const i = kv.indexOf("=");
+        return i === -1 ? [kv, ""] : [kv.slice(0, i), decodeURIComponent(kv.slice(i + 1))];
+      })
   );
 }
 
-// Require session for /admin (except /admin/login and /admin/logout endpoints)
 function requireSession(req, res, next) {
   if (req.path.startsWith("/login")) return next();
   if (req.path.startsWith("/logout")) return next();
   if (req.path.startsWith("/public")) return next();
+  if (req.path.startsWith("/api/"))  return next(); // our own admin ajax endpoints check session below
 
-  const cookies = parseCookies(req.headers.cookie || "");
-  const sid = cookies.sid;
-  if (!sid || !sessions.has(sid)) {
-    // not logged in -> redirect to login
-    return res.redirect(302, "/admin/login");
-  }
-  // optional: bind to user-agent to reduce token reuse
+  const sid = parseCookies(req.headers.cookie || "").sid;
+  if (!sid || !sessions.has(sid)) return res.redirect(302, "/admin/login");
+
   const sess = sessions.get(sid);
   if (sess.ua && req.headers["user-agent"] !== sess.ua) {
     sessions.delete(sid);
     return res.redirect(302, "/admin/login");
   }
-  // short idle timeout (e.g., 30 minutes)
   const MAX_IDLE_MS = 30 * 60 * 1000;
   if (Date.now() - sess.lastSeen > MAX_IDLE_MS) {
     sessions.delete(sid);
     return res.redirect(302, "/admin/login");
   }
+  sess.lastSeen = Date.now();
+  next();
+}
+
+function requireSessionApi(req, res, next) {
+  const sid = parseCookies(req.headers.cookie || "").sid;
+  if (!sid || !sessions.has(sid)) return res.status(401).json({ ok: false, error: "not_authenticated" });
+  const sess = sessions.get(sid);
   sess.lastSeen = Date.now();
   next();
 }
@@ -129,68 +131,76 @@ app.get("/admin/login", noStore, (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
 });
 
-// Handle login
+// Handle login (form or JSON)
 app.post("/admin/login", noStore, (req, res) => {
-  // Accept JSON or form
-  const { username, password } = (req.body && Object.keys(req.body).length) ? req.body : {};
-  // For simple forms (URL-encoded), parse manually if needed
-  if (!username || !password) {
-    // try to parse urlencoded payload
-    let bodyStr = "";
-    req.setEncoding("utf8");
-    req.on("data", chunk => bodyStr += chunk);
-    req.on("end", () => {
-      const params = new URLSearchParams(bodyStr);
-      const u = params.get("username");
-      const p = params.get("password");
-      if (u === BASIC_USER && p === BASIC_PASS) {
-        const sid = crypto.randomUUID();
-        sessions.set(sid, { ua: req.headers["user-agent"], createdAt: Date.now(), lastSeen: Date.now() });
-        // Session cookie (no Max-Age): expires when browser closes.
-        res.setHeader("Set-Cookie", `sid=${encodeURIComponent(sid)}; Path=/; HttpOnly; SameSite=Lax; Secure`);
-        return res.redirect(302, "/admin");
-      }
-      return res.status(401).send("Invalid credentials");
-    });
-  } else {
-    if (username === BASIC_USER && password === BASIC_PASS) {
+  const tryFinish = (u, p) => {
+    if (u === BASIC_USER && p === BASIC_PASS) {
       const sid = crypto.randomUUID();
       sessions.set(sid, { ua: req.headers["user-agent"], createdAt: Date.now(), lastSeen: Date.now() });
       res.setHeader("Set-Cookie", `sid=${encodeURIComponent(sid)}; Path=/; HttpOnly; SameSite=Lax; Secure`);
-      return res.json({ ok: true, redirect: "/admin" });
+      return res.redirect(302, "/admin");
     }
-    return res.status(401).json({ ok: false, error: "invalid_credentials" });
+    return res.status(401).send("Invalid credentials");
+  };
+  if (req.body && Object.keys(req.body).length) {
+    return tryFinish(req.body.username, req.body.password);
   }
+  // handle form-urlencoded
+  let body = "";
+  req.setEncoding("utf8");
+  req.on("data", c => body += c);
+  req.on("end", () => {
+    const p = new URLSearchParams(body);
+    tryFinish(p.get("username"), p.get("password"));
+  });
 });
 
-// Logout (called by button and on tab close)
+// Logout
 app.post("/admin/logout", noStore, (req, res) => {
-  const cookies = parseCookies(req.headers.cookie || "");
-  const sid = cookies.sid;
+  const sid = parseCookies(req.headers.cookie || "").sid;
   if (sid) sessions.delete(sid);
-  // Clear cookie
   res.setHeader("Set-Cookie", "sid=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0");
   res.json({ ok: true });
 });
 
-// Admin main page (requires session)
+// Admin main page
 app.get("/admin", noStore, (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Admin save (requires session)
-app.post("/admin/update", noStore, (req, res) => {
+// ---------- ADMIN AJAX API (secured by session) ----------
+
+// list all devices
+app.get("/admin/api/list", noStore, requireSessionApi, (_req, res) => {
+  const db = readDB();
+  // convert object -> array
+  const items = Object.entries(db).map(([device, v]) => ({ device, ...v }));
+  items.sort((a, b) => a.device.localeCompare(b.device));
+  res.json({ ok: true, items });
+});
+
+// save/update one
+app.post("/admin/api/save", noStore, requireSessionApi, (req, res) => {
   const { device, status, plan, expiry, notes } = req.body || {};
   if (!device) return res.status(400).json({ ok: false, error: "missing_device" });
-
   const code = String(device).trim().toUpperCase();
   const db = readDB();
   db[code] = { status, plan, expiry, notes };
   writeDB(db);
-  res.json({ ok: true, device_code: code, data: db[code] });
+  res.json({ ok: true, device: code, data: db[code] });
+});
+
+// delete one
+app.post("/admin/api/delete", noStore, requireSessionApi, (req, res) => {
+  const { device } = req.body || {};
+  if (!device) return res.status(400).json({ ok: false, error: "missing_device" });
+  const code = String(device).trim().toUpperCase();
+  const db = readDB();
+  if (db[code]) { delete db[code]; writeDB(db); }
+  res.json({ ok: true });
 });
 
 // Static assets
 app.use("/admin/public", express.static(path.join(__dirname, "public")));
 
-app.listen(PORT, () => console.log(`🚀 DBcooper API + Admin (session login) running on ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 DBcooper API + Admin (table & session) on ${PORT}`));
