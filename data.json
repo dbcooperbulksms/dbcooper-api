@@ -1,0 +1,8 @@
+{
+  "EXAMPLE01": {
+    "status": "active",
+    "plan": "Monthly",
+    "expiry": "2026-01-31T23:59:59Z",
+    "notes": "Test device"
+  }
+}
