@@ -1,19 +1,16 @@
-# Use the official Node image
 FROM node:20-alpine
-
-# Create app directory
 WORKDIR /app
 
-# Copy only package.json first and install deps
+# Install deps
 COPY package.json ./
 RUN npm install --production
 
-# Copy the rest of the app
-COPY server.js ./ 
+# Copy app files
+COPY server.js ./server.js
+COPY public ./public
+# If you have an existing data.json in repo, copy it; otherwise server creates one.
+COPY data.json ./data.json
 
-# Expose the port your app listens on
 ENV PORT=10000
 EXPOSE 10000
-
-# Start the server
 CMD ["node", "server.js"]
