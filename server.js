@@ -1,67 +1,39 @@
 import express from "express";
 import cors from "cors";
-import bodyParser from "body-parser";
-import fs from "fs";
 
 const app = express();
+const port = process.env.PORT || 10000;
+const ADMIN_KEY = process.env.ADMIN_KEY;
+
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 
-const PORT = process.env.PORT || 10000;
-
-// File where device activations are stored
-const DB_FILE = "./data.json";
-
-// Read activations from file or start fresh
-function readDB() {
-  try {
-    return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
-  } catch {
-    return {};
+let activations = {
+  EXAMPLE01: {
+    status: "active",
+    plan: "Monthly",
+    expiry: "2026-01-31T23:59:59Z",
+    notes: "Test device"
   }
-}
+};
 
-// Save activations back to file
-function writeDB(db) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
-}
-
-// Simple health check
-app.get("/", (req, res) => {
-  res.send("✅ DBcooper API is running.");
-});
-
-// Check activation by device code
+// Check endpoint
 app.get("/check", (req, res) => {
-  const code = (req.query.device || "").trim().toUpperCase();
-  if (!code) return res.status(400).json({ ok: false, error: "missing_device_code" });
-  const db = readDB();
-  const entry = db[code];
-  if (!entry) return res.json({ ok: true, status: "not_found" });
-  const now = new Date();
-  const exp = entry.expiry ? new Date(entry.expiry) : null;
-  const active = entry.status === "active" && (!exp || exp > now);
-  res.json({
-    ok: true,
-    device_code: code,
-    status: active ? "active" : "inactive",
-    plan: entry.plan,
-    expiry: entry.expiry,
-    notes: entry.notes || ""
-  });
+  const { device } = req.query;
+  const data = activations[device];
+  if (!data) return res.json({ ok: false, device_code: device, status: "not_found" });
+  res.json({ ok: true, device_code: device, ...data });
 });
 
-// Admin: add or update a device manually (optional simple auth)
-const ADMIN_KEY = process.env.ADMIN_KEY || "dbcooper-secret";
+// Update endpoint (admin only)
 app.post("/update", (req, res) => {
-  const key = req.headers.authorization?.replace("Bearer ", "");
-  if (key !== ADMIN_KEY) return res.status(403).json({ ok: false, error: "unauthorized" });
-  const { device_code, status, plan, expiry, notes } = req.body;
-  if (!device_code) return res.status(400).json({ ok: false, error: "missing_device_code" });
-  const db = readDB();
-  db[device_code.toUpperCase()] = { status, plan, expiry, notes };
-  writeDB(db);
-  res.json({ ok: true });
+  const key = req.headers.authorization;
+  if (key !== ADMIN_KEY) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  const { device, status, plan, expiry, notes } = req.body;
+  activations[device] = { status, plan, expiry, notes };
+  res.json({ ok: true, updated: activations[device] });
 });
 
-app.listen(PORT, () => console.log(`🚀 DBcooper API running on port ${PORT}`));
+app.listen(port, () => console.log(`🚀 DBcooper API running on port ${port}`));
+
