@@ -7,12 +7,14 @@
   <style>
     body { background:#0e0f12; color:#e9eef6; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; }
     .wrap { max-width: 720px; margin: 40px auto; padding: 20px; background:#1c212d; border-radius:16px; }
-    h1 { margin: 0 0 10px; color:#00e676; }
+    h1 { margin: 0 0 10px; color:#00e676; display:flex; justify-content:space-between; align-items:center; }
     label { display:block; margin-top:12px; font-size:14px; color:#b9c1cc; }
     input, select, textarea { width:100%; padding:12px; border-radius:10px; border:1px solid #2e3442; background:#232732; color:#fff; }
     .row { display:flex; gap:12px; }
     .row > div { flex:1; }
-    button { margin-top:16px; width:100%; padding:14px; border:none; border-radius:12px; font-weight:600; background:#00e676; color:#000; cursor:pointer; }
+    button { margin-top:16px; padding:12px 16px; border:none; border-radius:12px; font-weight:600; cursor:pointer; }
+    .primary { width:100%; background:#00e676; color:#000; }
+    .linkbtn { background:#2a2f3a; color:#e9eef6; }
     .small { color:#b9c1cc; font-size:12px; }
     .ok { color:#00e676; }
     .err { color:#ff8a80; }
@@ -21,8 +23,11 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>DBcooper Admin</h1>
-    <p class="small">Add or update activations. Protected with Basic Auth.</p>
+    <h1>
+      DBcooper Admin
+      <button id="logout" class="linkbtn" title="Log out now">Logout</button>
+    </h1>
+    <p class="small">Add or update activations. Your session will end when you close this tab.</p>
 
     <label>Device Code (8 chars, uppercase)</label>
     <input id="device" placeholder="e.g. A7C12F4B" />
@@ -51,13 +56,13 @@
     <label>Notes (optional)</label>
     <textarea id="notes" rows="3" placeholder="Paid via bank transfer, etc."></textarea>
 
-    <button id="save">Save / Update</button>
+    <button id="save" class="primary">Save / Update</button>
     <p id="result" class="small"></p>
 
     <hr style="border-color:#2e3442; margin:24px 0" />
 
     <p class="small">
-      Verify with public check: <br/>
+      Verify with public check:<br/>
       <code id="checkLink"></code>
     </p>
   </div>
@@ -65,6 +70,19 @@
   <script>
     const result = document.getElementById('result');
     const checkLink = document.getElementById('checkLink');
+
+    async function doLogout() {
+      try { await fetch('/admin/logout', { method: 'POST' }); }
+      catch {} // ignore
+    }
+
+    document.getElementById('logout').onclick = async () => {
+      await doLogout();
+      location.href = '/admin/login';
+    };
+
+    // Attempt to log out when tab closes or navigates away
+    window.addEventListener('beforeunload', () => { navigator.sendBeacon('/admin/logout'); });
 
     document.getElementById('save').onclick = async () => {
       result.textContent = 'Saving...';
