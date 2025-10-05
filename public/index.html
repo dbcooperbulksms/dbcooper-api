@@ -6,83 +6,114 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body { background:#0e0f12; color:#e9eef6; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; }
-    .wrap { max-width: 720px; margin: 40px auto; padding: 20px; background:#1c212d; border-radius:16px; }
-    h1 { margin: 0 0 10px; color:#00e676; display:flex; justify-content:space-between; align-items:center; }
-    label { display:block; margin-top:12px; font-size:14px; color:#b9c1cc; }
-    input, select, textarea { width:100%; padding:12px; border-radius:10px; border:1px solid #2e3442; background:#232732; color:#fff; }
-    .row { display:flex; gap:12px; }
-    .row > div { flex:1; }
-    button { margin-top:16px; padding:12px 16px; border:none; border-radius:12px; font-weight:600; cursor:pointer; }
-    .primary { width:100%; background:#00e676; color:#000; }
-    .linkbtn { background:#2a2f3a; color:#e9eef6; }
+    .wrap { max-width: 1100px; margin: 28px auto; padding: 20px; background:#1c212d; border-radius:16px; }
+    h1 { margin: 0 0 12px; color:#00e676; display:flex; justify-content:space-between; align-items:center; }
+    .topbar { display:flex; gap:10px; align-items:center; }
+    label { display:block; margin-top:10px; font-size:14px; color:#b9c1cc; }
+    input, select, textarea { width:100%; padding:10px; border-radius:10px; border:1px solid #2e3442; background:#232732; color:#fff; }
+    button { padding:10px 14px; border:none; border-radius:10px; font-weight:600; cursor:pointer; }
+    .primary { background:#00e676; color:#000; }
+    .muted { background:#2a2f3a; color:#e9eef6; }
+    .danger { background:#ff6b6b; color:#000; }
     .small { color:#b9c1cc; font-size:12px; }
-    .ok { color:#00e676; }
-    .err { color:#ff8a80; }
-    code { background:#0e0f12; padding:2px 6px; border-radius:6px; }
+
+    .grid { overflow-x:auto; margin-top:18px; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; padding:10px; border-bottom:1px solid #2e3442; }
+    th { color:#b9c1cc; font-weight:600; font-size:13px; }
+    td code { background:#0e0f12; padding:2px 6px; border-radius:6px; }
+    .row { display:flex; gap:12px; margin-top:10px; }
+    .row > div { flex:1; }
+    .right { text-align:right; }
+    .status-pill { padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; display:inline-block; }
+    .s-active { background:#0bd67c33; color:#00e676; }
+    .s-inactive { background:#ff6b6b33; color:#ff8a80; }
+    .searchbar { flex:1; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>
       DBcooper Admin
-      <button id="logout" class="linkbtn" title="Log out now">Logout</button>
+      <div class="topbar">
+        <input id="search" class="searchbar" placeholder="Search device / plan / notes…" />
+        <button id="refresh" class="muted">Refresh</button>
+        <button id="logout" class="muted">Logout</button>
+      </div>
     </h1>
-    <p class="small">Add or update activations. Your session will end when you close this tab.</p>
 
-    <label>Device Code (8 chars, uppercase)</label>
-    <input id="device" placeholder="e.g. A7C12F4B" />
+    <!-- Editor -->
+    <div id="editor">
+      <div class="row">
+        <div>
+          <label>Device Code (8 chars, uppercase)</label>
+          <input id="device" placeholder="A7C12F4B" />
+        </div>
+        <div>
+          <label>Plan</label>
+          <select id="plan">
+            <option>Monthly</option>
+            <option>Quarterly</option>
+            <option>Yearly</option>
+          </select>
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="status">
+            <option>active</option>
+            <option>inactive</option>
+          </select>
+        </div>
+      </div>
 
-    <div class="row">
-      <div>
-        <label>Plan</label>
-        <select id="plan">
-          <option>Monthly</option>
-          <option>Quarterly</option>
-          <option>Yearly</option>
-        </select>
+      <div class="row">
+        <div>
+          <label>Expiry (UTC ISO)</label>
+          <input id="expiry" placeholder="2026-12-31T23:59:59Z" />
+        </div>
+        <div>
+          <label>Notes (optional)</label>
+          <input id="notes" placeholder="Paid via bank transfer…" />
+        </div>
+        <div class="right" style="align-self:flex-end;">
+          <button id="save" class="primary">Save / Update</button>
+        </div>
       </div>
-      <div>
-        <label>Status</label>
-        <select id="status">
-          <option>active</option>
-          <option>inactive</option>
-        </select>
-      </div>
+      <p id="result" class="small"></p>
     </div>
 
-    <label>Expiry (UTC ISO)</label>
-    <input id="expiry" placeholder="2026-12-31T23:59:59Z" />
+    <!-- Table -->
+    <div class="grid">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th>Device</th>
+            <th>Status</th>
+            <th>Plan</th>
+            <th>Expiry</th>
+            <th>Notes</th>
+            <th class="right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
 
-    <label>Notes (optional)</label>
-    <textarea id="notes" rows="3" placeholder="Paid via bank transfer, etc."></textarea>
-
-    <button id="save" class="primary">Save / Update</button>
-    <p id="result" class="small"></p>
-
-    <hr style="border-color:#2e3442; margin:24px 0" />
-
-    <p class="small">
-      Verify with public check:<br/>
-      <code id="checkLink"></code>
-    </p>
+    <p class="small" style="margin-top:14px;">Tip: click a row to load it into the editor.</p>
   </div>
 
   <script>
+    const rowsEl = document.getElementById('rows');
     const result = document.getElementById('result');
-    const checkLink = document.getElementById('checkLink');
-
-    async function doLogout() {
-      try { await fetch('/admin/logout', { method: 'POST' }); }
-      catch {} // ignore
-    }
 
     document.getElementById('logout').onclick = async () => {
-      await doLogout();
+      await fetch('/admin/logout', { method: 'POST' });
       location.href = '/admin/login';
     };
-
-    // Attempt to log out when tab closes or navigates away
     window.addEventListener('beforeunload', () => { navigator.sendBeacon('/admin/logout'); });
+
+    document.getElementById('refresh').onclick = load;
+    document.getElementById('search').oninput = filter;
 
     document.getElementById('save').onclick = async () => {
       result.textContent = 'Saving...';
@@ -100,26 +131,111 @@
         return;
       }
 
-      try {
-        const r = await fetch('/admin/update', {
+      const r = await fetch('/admin/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device, status, plan, expiry, notes })
+      });
+      const json = await r.json();
+      if (!r.ok || !json.ok) {
+        result.textContent = 'Error: ' + (json.error || r.status);
+        result.className = 'small err';
+        return;
+      }
+      result.textContent = 'Saved ✓';
+      result.className = 'small ok';
+      await load();
+      selectInTable(device);
+    };
+
+    function rowHtml(item) {
+      const sClass = item.status === 'active' ? 's-active' : 's-inactive';
+      return `<tr data-device="${item.device}">
+        <td><code>${item.device}</code></td>
+        <td><span class="status-pill ${sClass}">${item.status || ''}</span></td>
+        <td>${item.plan || ''}</td>
+        <td>${item.expiry || ''}</td>
+        <td>${item.notes || ''}</td>
+        <td class="right">
+          <button class="muted" data-act="edit">Edit</button>
+          <button class="danger" data-act="del">Delete</button>
+        </td>
+      </tr>`;
+    }
+
+    function filter() {
+      const q = document.getElementById('search').value.toLowerCase();
+      for (const tr of rowsEl.querySelectorAll('tr')) {
+        const text = tr.innerText.toLowerCase();
+        tr.style.display = text.includes(q) ? '' : 'none';
+      }
+    }
+
+    function loadIntoEditor(item) {
+      document.getElementById('device').value = item.device || '';
+      document.getElementById('plan').value   = item.plan || 'Monthly';
+      document.getElementById('status').value = item.status || 'inactive';
+      document.getElementById('expiry').value = item.expiry || '';
+      document.getElementById('notes').value  = item.notes || '';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function selectInTable(device) {
+      for (const tr of rowsEl.querySelectorAll('tr')) {
+        tr.style.outline = tr.dataset.device === device ? '2px solid #00e676' : 'none';
+      }
+    }
+
+    rowsEl.onclick = async (e) => {
+      const btn = e.target.closest('button');
+      const tr  = e.target.closest('tr');
+      if (!tr) return;
+      const device = tr.dataset.device;
+      if (btn && btn.dataset.act === 'del') {
+        if (!confirm(`Delete ${device}?`)) return;
+        const r = await fetch('/admin/api/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ device, status, plan, expiry, notes })
+          body: JSON.stringify({ device })
         });
         const json = await r.json();
         if (!r.ok || !json.ok) {
-          result.textContent = 'Error: ' + (json.error || r.status);
-          result.className = 'small err';
+          alert('Delete failed: ' + (json.error || r.status));
           return;
         }
-        result.textContent = 'Saved ✓';
-        result.className = 'small ok';
-        checkLink.textContent = location.origin + '/check?device=' + device;
-      } catch (e) {
-        result.textContent = 'Network error: ' + e.message;
-        result.className = 'small err';
+        await load();
+        return;
       }
+      // edit
+      const tds = tr.querySelectorAll('td');
+      loadIntoEditor({
+        device,
+        status: tds[1].innerText.trim(),
+        plan: tds[2].innerText.trim(),
+        expiry: tds[3].innerText.trim(),
+        notes: tds[4].innerText.trim()
+      });
+      selectInTable(device);
     };
+
+    async function load() {
+      result.textContent = 'Loading...';
+      result.className = 'small';
+      const r = await fetch('/admin/api/list');
+      const json = await r.json();
+      if (!r.ok || !json.ok) {
+        result.textContent = 'Error: ' + (json.error || r.status);
+        result.className = 'small err';
+        return;
+      }
+      rowsEl.innerHTML = (json.items || []).map(rowHtml).join('');
+      result.textContent = `Loaded ${json.items.length} devices.`;
+      result.className = 'small';
+      filter();
+    }
+
+    // initial load
+    load();
   </script>
 </body>
 </html>
