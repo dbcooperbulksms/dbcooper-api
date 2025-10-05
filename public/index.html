@@ -22,7 +22,7 @@
 <body>
   <div class="wrap">
     <h1>DBcooper Admin</h1>
-    <p class="small">Enter details and click Save. This panel is password-protected and does not expose your server key.</p>
+    <p class="small">Add or update activations. Protected with Basic Auth.</p>
 
     <label>Device Code (8 chars, uppercase)</label>
     <input id="device" placeholder="e.g. A7C12F4B" />
@@ -45,7 +45,7 @@
       </div>
     </div>
 
-    <label>Expiry (UTC ISO, e.g. 2026-12-31T23:59:59Z)</label>
+    <label>Expiry (UTC ISO)</label>
     <input id="expiry" placeholder="2026-12-31T23:59:59Z" />
 
     <label>Notes (optional)</label>
@@ -77,7 +77,7 @@
       const notes  = document.getElementById('notes').value.trim();
 
       if (!/^[A-F0-9]{8}$/.test(device)) {
-        result.textContent = 'Enter a valid 8-character uppercase hex device code.';
+        result.textContent = 'Enter an 8-character uppercase hex device code.';
         result.className = 'small err';
         return;
       }
